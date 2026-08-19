@@ -62,8 +62,8 @@ parseline(char *buf, char **argv, char **infile, char **outfile)
   return argc;
 }
 
-// Ejecuta un comando  en el proceso actual.
-// Se usa dentro de un hijo ya creado con fork(), para comandos sueltos y para cada lado de un pipe.
+// Ejecuta un comando simple (con posible redireccion) en el proceso actual.
+// Nunca regresa: o hace exec() con exito, o termina el proceso con exit().
 void
 runcmd(char *cmdline)
 {
@@ -95,8 +95,8 @@ runcmd(char *cmdline)
   exit();
 }
 
-// Busca un '|' en la linea. Si lo encuentra, corta el string ahi mismo
-// lo convierte en \0 y devuelve un puntero a lo que sigue despues.
+// Busca el PRIMER '|' en la linea. Si lo encuentra, corta el string ahi
+// mismo (lo convierte en \0) y devuelve un puntero a lo que sigue despues.
 // Si no hay pipe, devuelve 0.
 char *
 findpipe(char *cmdline)
@@ -112,57 +112,66 @@ findpipe(char *cmdline)
   return 0;
 }
 
+// Resuelve una linea que puede tener 0 o mas pipes encadenados.
+// Si no hay pipe, ejecuta el comando directamente (no regresa).
+// Si hay pipe, crea el pipe, un hijo para el lado izquierdo (runcmd) y
+// otro para el lado derecho, que se resuelve llamando a execline otra vez
+// (recursion), permitiendo cualquier cantidad de pipes encadenados.
+void
+execline(char *cmdline)
+{
+  char *right = findpipe(cmdline);
+
+  if(right == 0){
+    runcmd(cmdline);
+    return; // runcmd nunca regresa realmente, pero lo dejamos por claridad
+  }
+
+  int fd[2];
+  pipe(fd);
+
+  int pid1 = fork();
+  if(pid1 == 0){
+    close(1);
+    dup(fd[1]);
+    close(fd[0]);
+    close(fd[1]);
+    runcmd(cmdline);
+  }
+
+  int pid2 = fork();
+  if(pid2 == 0){
+    close(0);
+    dup(fd[0]);
+    close(fd[0]);
+    close(fd[1]);
+    execline(right);
+    exit();
+  }
+
+  close(fd[0]);
+  close(fd[1]);
+  wait();
+  wait();
+}
+
+// Ciclo que se repite hasta que el usuario cierre el programa: lee el
+// comando, revisa si es "exit", y si no, delega toda la ejecucion
+// (con o sin pipes) a execline dentro de un proceso hijo.
 int
 main(void)
 {
   static char buf[100];
 
   while(getcmd(buf, sizeof(buf)) >= 0){
-    // caso especial: exit se revisa ANTES de separar por pipe,
-    // sobre la linea completa tal cual la escribio el usuario.
-    
     if(strcmp(buf, "exit\n") == 0 || strcmp(buf, "exit") == 0)
       exit();
 
-    char *right = findpipe(buf);
-
-    if(right == 0){
-      // No hay pipe: comando simple, igual que antes.
-      int pid = fork();
-      if(pid == 0){
-        runcmd(buf);
-      } else {
-        wait();
-      }
+    int pid = fork();
+    if(pid == 0){
+      execline(buf);
+      exit();
     } else {
-      // Hay pipe: buf tiene el comando izquierdo, right el derecho.
-      int fd[2];
-      pipe(fd);
-
-      int pid1 = fork();
-      if(pid1 == 0){
-        // Hijo izquierdo: su salida va al pipe
-        close(1);
-        dup(fd[1]);
-        close(fd[0]);
-        close(fd[1]);
-        runcmd(buf);
-      }
-
-      int pid2 = fork();
-      if(pid2 == 0){
-        // Hijo derecho: su entrada viene del pipe
-        close(0);
-        dup(fd[0]);
-        close(fd[0]);
-        close(fd[1]);
-        runcmd(right);
-      }
-
-      // El padre cierra ambos extremos y espera a los dos hijos
-      close(fd[0]);
-      close(fd[1]);
-      wait();
       wait();
     }
   }
