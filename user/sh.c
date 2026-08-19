@@ -161,6 +161,7 @@ execline(char *cmdline)
 int
 main(void)
 {
+  printf(1, "PROYECTO JUDAMA\n");
   static char buf[100];
 
   while(getcmd(buf, sizeof(buf)) >= 0){
