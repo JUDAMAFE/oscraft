@@ -3,7 +3,7 @@
 ### Integrantes
 - Juan Daniel Martinez
 - Juan Diego Martinez
-- Alejandro Restrepo Osorio
+
 ### Curso
 Sistemas Operativos
 ### Semestre
