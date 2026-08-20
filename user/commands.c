@@ -97,12 +97,7 @@ void execline(char *cmdline)
             
   }
 
-  // El proceso padre (quien llamo a execline) no participa en la
-  // ejecucion de los comandos: solo debe cerrar AMBOS extremos del
-  // pipe (aunque no los use), porque si los deja abiertos, el sistema
-  // operativo puede pensar que "alguien mas" todavia podria escribir
-  // o leer, y el segundo comando se quedaria esperando datos para
-  // siempre sin recibir nunca la señal de "no hay mas datos".
+
   // cierra los extremos del pipe "tubo" para que el padre no piende que alguien mas va a enviar o recivbir datos
   close(fd[0]);
   close(fd[1]);
