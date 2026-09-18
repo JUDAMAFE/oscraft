@@ -157,11 +157,15 @@ _forktest: forktest.o $(ULIB)
 	$(OBJDUMP) -S _forktest > forktest.asm
 
 _sh: sh.o parser.o commands.o $(ULIB)
-	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
-	$(OBJDUMP) -S $@ > $*.asm
-	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym
-mkfs: mkfs.c fs.h
-	gcc -Wall -o mkfs mkfs.c
+	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o _sh sh.o parser.o commands.o $(ULIB)
+	$(OBJDUMP) -S _sh > sh.asm
+	$(OBJDUMP) -t _sh | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > sh.sym
+
+parser.o: parser.c parser.h types.h user.h
+	$(CC) $(CFLAGS) -c parser.c
+
+commands.o: commands.c commands.h parser.h types.h user.h stat.h fcntl.h
+	$(CC) $(CFLAGS) -c commands.c
 
 # Prevent deletion of intermediate files, e.g. cat.o, after first build, so
 # that disk image changes after first build are persistent until clean.  More
@@ -185,6 +189,7 @@ UPROGS=\
 	_usertests\
 	_wc\
 	_zombie\
+	_sysinfo\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)
