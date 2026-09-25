@@ -146,3 +146,24 @@ if (copyout(myproc()->pagetable, myproc()->sz, addr, (char *)&info, sizeof(info)
 
   return 0;
 }
+
+uint64
+sys_trace(void)
+{
+  char name[16];
+  int len;
+  int id;
+
+  len = argstr(0, name, sizeof(name));
+  if(len < 0)
+    return -1;
+
+  id = syscallid_by_name(name);
+  if(id < 0){
+    printk("trace: syscall desconocida: %s\n", name);
+    return -1;
+  }
+
+  myproc()->traced_syscall = id;
+  return 0;
+}
