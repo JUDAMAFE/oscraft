@@ -1,7 +1,7 @@
-#include "../types.h"
-#include "stat.h"
+#include "kernel/types.h"
+#include "kernel/stat.h"
 #include "user.h"
-#include "fcntl.h"
+#include "kernel/fcntl.h"
 #include "parser.h"
 #include "commands.h"
 
@@ -18,15 +18,15 @@ void runcmd(char *cmdline)
 
   // termina el proceso si el usuario envia enter sin nada 
   if(argc == 0)
-    exit();
+    exit(0);
 
  
   // en cas ode redireccion de netrasa < cierra la entarda 0 y abre el archivo para leer desde ahi 
   if(infile){
     close(0);
     if(open(infile, O_RDONLY) < 0){
-      printf(2, "cannot open %s\n", infile);
-      exit();
+      fprintf(2, "cannot open %s\n", infile);
+      exit(0);
     }
   }
 
@@ -35,8 +35,8 @@ void runcmd(char *cmdline)
   if(outfile){
     close(1);
     if(open(outfile, O_WRONLY | O_CREATE) < 0){
-      printf(2, "cannot open %s\n", outfile);
-      exit();
+      fprintf(2, "cannot open %s\n", outfile);
+      exit(0);
     }
   }
 
@@ -44,8 +44,8 @@ void runcmd(char *cmdline)
   exec(argv[0], argv);
 
   // fallo 
-  printf(2, "exec %s failed\n", argv[0]);
-  exit();
+  fprintf(2, "exec %s failed\n", argv[0]);
+  exit(0);
 }
 
 
@@ -93,7 +93,7 @@ void execline(char *cmdline)
 
     // se usa la recurcion para auto llamar el comando y verificar que no haya mas pipes a a la derecha
     execline(right);
-    exit(); // termina el proceso despues de todos los pipes
+    exit(0); // termina el proceso despues de todos los pipes
             
   }
 
@@ -103,6 +103,6 @@ void execline(char *cmdline)
   close(fd[1]);
 
   //  el padre espera a que ambos hijos terminen
-  wait();
-  wait();
+  wait(0);
+  wait(0);
 }
