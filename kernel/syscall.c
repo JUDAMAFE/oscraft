@@ -104,6 +104,7 @@ extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_sync(void);
 extern uint64 sys_sysinfo(void);
+extern uint64 sys_trace(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -132,10 +133,48 @@ static uint64 (*syscalls[])(void) = {
   [SYS_close]   sys_close,
   [SYS_sync]    sys_sync,
   [SYS_sysinfo]    sys_sysinfo,
+  [SYS_trace]   sys_trace,
   
   // clang-format on
 };
+static char *syscallnames[] = {
+  [SYS_fork]    "fork",
+  [SYS_exit]    "exit",
+  [SYS_wait]    "wait",
+  [SYS_pipe]    "pipe",
+  [SYS_read]    "read",
+  [SYS_kill]    "kill",
+  [SYS_exec]    "exec",
+  [SYS_fstat]   "fstat",
+  [SYS_chdir]   "chdir",
+  [SYS_dup]     "dup",
+  [SYS_getpid]  "getpid",
+  [SYS_sbrk]    "sbrk",
+  [SYS_pause]   "pause",
+  [SYS_uptime]  "uptime",
+  [SYS_open]    "open",
+  [SYS_write]   "write",
+  [SYS_mknod]   "mknod",
+  [SYS_unlink]  "unlink",
+  [SYS_link]    "link",
+  [SYS_mkdir]   "mkdir",
+  [SYS_close]   "close",
+  [SYS_sync]    "sync",
+  [SYS_sysinfo] "sysinfo",
+  [SYS_trace]   "trace",
+};
 
+// Busca el numero de syscall que corresponde a un nombre (ej: "kill" -> SYS_kill)
+int
+syscallid_by_name(char *name)
+{
+  int i;
+  for(i = 1; i < NELEM(syscallnames); i++){
+    if(syscallnames[i] && strncmp(syscallnames[i], name, 16) == 0)
+      return i;
+  }
+  return -1;
+}
 void
 syscall(void)
 {
@@ -144,9 +183,17 @@ syscall(void)
 
   num = p->trapframe->a7;
   if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    // Use num to lookup the system call function for num, call it,
-    // and store its return value in p->trapframe->a0
     p->trapframe->a0 = syscalls[num]();
+
+    if(p->traced_syscall == num){
+      printk("PID: %d\n", p->pid);
+      printk("SYSCALL: %s\n", syscallnames[num]);
+      printk("RETURN: %d\n", (int)p->trapframe->a0);
+      printk("s0: 0x%x\n", (uint)p->trapframe->s0);
+      printk("s1: 0x%x\n", (uint)p->trapframe->s1);
+      printk("a0: 0x%x\n", (uint)p->trapframe->a0);
+      printk("a1: 0x%x\n", (uint)p->trapframe->a1);
+    }
   } else {
     printk("%d %s: unknown sys call %d\n", p->pid, p->name, num);
     p->trapframe->a0 = -1;

@@ -166,6 +166,7 @@ freeproc(struct proc *p)
   p->name[0] = 0;
   p->chan = 0;
   p->killed = 0;
+  p->traced_syscall = 0;
   p->xstate = 0;
   p->state = UNUSED;
 }
