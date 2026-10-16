@@ -21,13 +21,15 @@ int mkdir(const char *);
 int chdir(const char *);
 int dup(int);
 int getpid(void);
-int ugetpid(void);
 char *sys_sbrk(int, int);
 int pause(int);
 int uptime(void);
 int sync(void);
+int vmprint(void);
+int pgaccess(void *base, int npages, uint64 *mask);
 
 // ulib.c
+int ugetpid(void);
 int stat(const char *, struct stat *);
 char *strcpy(char *, const char *);
 void *memmove(void *, const void *, int);

@@ -110,3 +110,60 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// Imprime la tabla de paginas del proceso que la invoca.
+uint64
+sys_vmprint(void)
+{
+  vmprint(myproc()->pagetable);
+  return 0;
+}
+
+// pgaccess(base, npages, mask): el bit i de *mask vale 1 si la pagina
+// base + i*PGSIZE fue leida o escrita desde la ultima consulta.
+uint64
+sys_pgaccess(void)
+{
+  struct proc *p = myproc();
+  uint64 base, maskaddr, va, mask = 0;
+  int npages, i;
+  pte_t *pte;
+
+  argaddr(0, &base);
+  argint(1, &npages);
+  argaddr(2, &maskaddr);
+
+  // validar argumentos
+  if (base % PGSIZE != 0)
+    return -1;
+  if (npages < 1 || npages > 64)
+    return -1;
+  if (base + (uint64)npages * PGSIZE < base ||
+      base + (uint64)npages * PGSIZE > p->sz)
+    return -1;
+
+  // 1er recorrido: leer los bits PTE_A. walk() con alloc=0 no asigna
+  // memoria: una pagina perezosa sin tocar no tiene PTE valida y cuenta 0.
+  for (i = 0; i < npages; i++) {
+    va = base + (uint64)i * PGSIZE;
+    pte = walk(p->pagetable, va, 0);
+    if (pte && (*pte & PTE_V) && (*pte & PTE_A))
+      mask |= 1UL << i;
+  }
+
+  if (copyout(p->pagetable, p->sz, maskaddr, (char *)&mask, sizeof(mask)) < 0)
+    return -1;
+
+  // 2o recorrido: limpiar PTE_A solo si el resultado ya llego al usuario
+  for (i = 0; i < npages; i++) {
+    if (mask & (1UL << i)) {
+      pte = walk(p->pagetable, base + (uint64)i * PGSIZE, 0);
+      *pte &= ~PTE_A;
+    }
+  }
+  // sin esto la TLB conservaria la traduccion con A=1 y el hardware
+  // no volveria a encender el bit en el siguiente acceso
+  sfence_vma();
+
+  return 0;
+}
