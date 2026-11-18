@@ -6,7 +6,6 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
-#include "../user/sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -58,7 +57,7 @@ sys_sbrk(void)
     // memory, vmfault() will allocate it.
     if (addr + n < addr)
       return -1;
-    if (addr + n > TRAPFRAME)
+    if (addr + n > USYSCALL)
       return -1;
     myproc()->sz += n;
   }
@@ -112,37 +111,59 @@ sys_uptime(void)
   return xticks;
 }
 
+// Imprime la tabla de paginas del proceso que la invoca.
 uint64
-sys_sysinfo(void)
+sys_vmprint(void)
 {
-  uint64 addr;
-  struct sysinfo info;
-
-  // 1. Extraemos la dirección de memoria virtual que pasó el usuario por argumento
-  argaddr(0, &addr);
-
-  // 2. Rellenamos los campos de la estructura con las funciones auxiliares del kernel
-  info.n_runnable = get_runnable_count();        // Función que creamos en proc.c
-  info.freemem = get_free_memory();              // Memoria libre en bytes
- // Calcular el total de páginas físicas reales restando KERNBASE a PHYSTOP
-uint64 total_pages = (PHYSTOP - KERNBASE) / PGSIZE;
-uint64 free_pages = info.freemem / PGSIZE;
-
-// Asigna el resultado correcto a n_upages (Páginas usadas)
-if (total_pages > free_pages) {
-    info.n_upages = total_pages - free_pages;
-} else {
-    info.n_upages = 0;
+  vmprint(myproc()->pagetable);
+  return 0;
 }
 
-// Y si necesitas guardar las disponibles o totales en n_apages:
-info.n_apages = free_pages; // o el valor que corresponda según tu estructura
-  
-  // (Opcional según tu lógica: puedes calcular páginas usadas restando del total físico)
+// pgaccess(base, npages, mask): el bit i de *mask vale 1 si la pagina
+// base + i*PGSIZE fue leida o escrita desde la ultima consulta.
+uint64
+sys_pgaccess(void)
+{
+  struct proc *p = myproc();
+  uint64 base, maskaddr, va, mask = 0;
+  int npages, i;
+  pte_t *pte;
 
-  // 3. Copiamos la estructura del kernel al espacio de usuario de forma segura con copyout
-if (copyout(myproc()->pagetable, myproc()->sz, addr, (char *)&info, sizeof(info)) < 0)
+  argaddr(0, &base);
+  argint(1, &npages);
+  argaddr(2, &maskaddr);
+
+  // validar argumentos
+  if (base % PGSIZE != 0)
     return -1;
+  if (npages < 1 || npages > 64)
+    return -1;
+  if (base + (uint64)npages * PGSIZE < base ||
+      base + (uint64)npages * PGSIZE > p->sz)
+    return -1;
+
+  // 1er recorrido: leer los bits PTE_A. walk() con alloc=0 no asigna
+  // memoria: una pagina perezosa sin tocar no tiene PTE valida y cuenta 0.
+  for (i = 0; i < npages; i++) {
+    va = base + (uint64)i * PGSIZE;
+    pte = walk(p->pagetable, va, 0);
+    if (pte && (*pte & PTE_V) && (*pte & PTE_A))
+      mask |= 1UL << i;
+  }
+
+  if (copyout(p->pagetable, p->sz, maskaddr, (char *)&mask, sizeof(mask)) < 0)
+    return -1;
+
+  // 2o recorrido: limpiar PTE_A solo si el resultado ya llego al usuario
+  for (i = 0; i < npages; i++) {
+    if (mask & (1UL << i)) {
+      pte = walk(p->pagetable, base + (uint64)i * PGSIZE, 0);
+      *pte &= ~PTE_A;
+    }
+  }
+  // sin esto la TLB conservaria la traduccion con A=1 y el hardware
+  // no volveria a encender el bit en el siguiente acceso
+  sfence_vma();
 
   return 0;
 }

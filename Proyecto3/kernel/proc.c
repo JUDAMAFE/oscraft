@@ -132,6 +132,15 @@ found:
     return 0;
   }
 
+  // Allocate the shared read-only page (USYSCALL) and store the pid in it.
+  if ((p->usyscall = (struct usyscall *)kalloc()) == 0) {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+  memset(p->usyscall, 0, PGSIZE); // no filtrar basura del kernel al usuario
+  p->usyscall->pid = p->pid;
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if (p->pagetable == 0) {
@@ -158,6 +167,9 @@ freeproc(struct proc *p)
   if (p->trapframe)
     kfree((void *)p->trapframe);
   p->trapframe = 0;
+  if (p->usyscall)
+    kfree((void *)p->usyscall);
+  p->usyscall = 0;
   if (p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -201,6 +213,16 @@ proc_pagetable(struct proc *p)
     return 0;
   }
 
+  // map the shared page just below the trapframe. The user can read it
+  // (PTE_U | PTE_R) but not write it.
+  if (mappages(pagetable, USYSCALL, PGSIZE, (uint64)(p->usyscall),
+               PTE_R | PTE_U) < 0) {
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
   return pagetable;
 }
 
@@ -211,6 +233,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 
@@ -240,7 +263,7 @@ growproc(int n)
 
   sz = p->sz;
   if (n > 0) {
-    if (sz + n > TRAPFRAME) {
+    if (sz + n > USYSCALL) {
       return -1;
     }
     if ((sz = uvmalloc(p->pagetable, sz, sz + n, PTE_W)) == 0) {
@@ -519,14 +542,13 @@ forkret(void)
   // Still holding p->lock from scheduler.
   release(&p->lock);
 
-  if (__atomic_load_n(&first, __ATOMIC_ACQUIRE)) {
+  if (first) {
+    first = 0;
+
     // File system initialization must be run in the context of a
     // regular process (e.g., because it calls sleep), and thus cannot
     // be run from main().
     fsinit(ROOTDEV);
-
-    // ensure other cores see first=0.
-    __atomic_store_n(&first, 0, __ATOMIC_RELEASE);
 
     // We can invoke kexec() now that file system is initialized.
     // Put the return value (argc) of kexec into a0.
@@ -603,6 +625,9 @@ kkill(int pid)
 {
   struct proc *p;
 
+  if (pid == 0)
+    return -1;
+
   for (p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if (p->pid == pid) {
@@ -676,12 +701,12 @@ procdump(void)
 {
   static char *states[] = {
     // clang-format off
-    [UNUSED]    "unused",
-    [USED]      "used",
-    [SLEEPING]  "sleep ",
-    [RUNNABLE]  "runble",
-    [RUNNING]   "run   ",
-    [ZOMBIE]    "zombie"
+    [UNUSED]    = "unused",
+    [USED]      = "used",
+    [SLEEPING]  = "sleep ",
+    [RUNNABLE]  = "runble",
+    [RUNNING]   = "run   ",
+    [ZOMBIE]    = "zombie"
     // clang-format on
   };
   struct proc *p;
@@ -698,20 +723,4 @@ procdump(void)
     printk("%d %s %s", p->pid, state, p->name);
     printk("\n");
   }
-}
-// Retorna el número de procesos en estado RUNNABLE
-int
-get_runnable_count(void)
-{
-  struct proc *p;
-  int count = 0;
-
-  for (p = proc; p < &proc[NPROC]; p++) {
-    acquire(&p->lock);
-    if (p->state == RUNNABLE) {
-      count++;
-    }
-    release(&p->lock);
-  }
-  return count;
 }
