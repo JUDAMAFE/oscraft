@@ -59,6 +59,10 @@ void            ireclaim(int);
 // kalloc.c
 void*           kalloc(void);
 void            kfree(void *);
+void            krefinc(void *);
+int             krefcount(void *);
+uint64          kfreepages(void);
+uint64          ksharedpages(void);
 void            kinit(void);
 
 // log.c
