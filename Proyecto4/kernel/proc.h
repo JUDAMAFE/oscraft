@@ -97,6 +97,8 @@ struct proc {
   uint64 sz;                   // Size of process memory (bytes)
   pagetable_t pagetable;       // User page table
   struct trapframe *trapframe; // data page for trampoline.S
+  uint64 cowfaults;            // fallos CoW atendidos
+  uint64 cowcopies;            // de esos, cuántos copiaron la página
   struct usyscall *usyscall;   // read-only page shared with user
   struct context context;      // swtch() here to run process
   struct file *ofile[NOFILE];  // Open files
