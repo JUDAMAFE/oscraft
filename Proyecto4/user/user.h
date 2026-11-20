@@ -43,6 +43,8 @@ char *sbrklazy(int);
 int ugetpid(void);
 int vmprint(void);
 int pgaccess(void *, int, uint64 *);
+struct cowstat;
+int cowstat(struct cowstat *);
 
 // printf.c
 void fprintf(int, const char *, ...) __attribute__((format(printf, 2, 3)));

@@ -6,6 +6,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
+#include "cowstat.h"
 
 uint64
 sys_exit(void)
@@ -132,6 +133,23 @@ sys_pgaccess(void)
     }
   }
   if (copyout(p->pagetable, p->sz, umask, (char *)&mask, sizeof(mask)) < 0)
+    return -1;
+  return 0;
+}
+
+uint64
+sys_cowstat(void)
+{
+  uint64 addr;
+  struct cowstat st;
+  struct proc *p = myproc();
+
+  argaddr(0, &addr);
+  st.freepages = kfreepages();
+  st.sharedpages = ksharedpages();
+  st.cowfaults = p->cowfaults;
+  st.cowcopies = p->cowcopies;
+  if (copyout(p->pagetable, p->sz, addr, (char *)&st, sizeof(st)) < 0)
     return -1;
   return 0;
 }

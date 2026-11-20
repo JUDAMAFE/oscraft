@@ -23,3 +23,4 @@
 #define SYS_sync   22
 #define SYS_vmprint 23
 #define SYS_pgaccess 24
+#define SYS_cowstat 25

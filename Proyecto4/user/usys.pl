@@ -45,3 +45,4 @@ entry("uptime");
 entry("sync");
 entry("vmprint");
 entry("pgaccess");
+entry("cowstat");
